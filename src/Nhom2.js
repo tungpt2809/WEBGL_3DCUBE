@@ -10,18 +10,32 @@ var VSHADER_SOURCE =
     'uniform vec3 u_LightDirection;\n' + // Light direction (in the world coordinate, normalized)
     'uniform vec3 u_AmbientLight;\n' +   // Ambient light color
     'varying vec4 v_Color;\n' +
+
+    'attribute vec2 a_TexCoord;\n' +
+    'varying vec2 v_TexCoord;\n' +
+
+    'varying float v_nDotL;\n' +
+    'varying vec3 v_LightColor;\n' +
+    'varying vec3 v_AmbientLight;\n' +
+
     'void main() {\n' +
     '  gl_Position = u_MvpMatrix * a_Position;\n' +
     // Recalculate the normal based on the model matrix and make its length 1.
     '  vec3 normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
     // Calculate the dot product of the light direction and the orientation of a surface (the normal)
     '  float nDotL = max(dot(u_LightDirection, normal), 0.0);\n' +
+    '  v_nDotL = nDotL;' +
     // Calculate the color due to diffuse reflection
     '  vec3 diffuse = u_LightColor * a_Color.rgb * nDotL;\n' +
+    '  v_LightColor = u_LightColor;' +
     // Calculate the color due to ambient reflection
     '  vec3 ambient = u_AmbientLight * a_Color.rgb;\n' +
+    '  v_AmbientLight = u_AmbientLight;' +
     // Add the surface colors due to diffuse reflection and ambient reflection
     '  v_Color = vec4(diffuse + ambient, a_Color.a);\n' +
+
+    '  v_TexCoord = a_TexCoord;\n' +
+
     '}\n';
 
 // Fragment shader program
@@ -30,16 +44,44 @@ var FSHADER_SOURCE =
     'precision mediump float;\n' +
     '#endif\n' +
     'varying vec4 v_Color;\n' +
+
+    'uniform sampler2D u_Sampler;\n' +
+    'varying vec2 v_TexCoord;\n' +
+    'varying float v_nDotL;\n' +
+    'varying vec3 v_LightColor;\n' +
+    'varying vec3 v_AmbientLight;\n' +
+
     'void main() {\n' +
-    '  gl_FragColor = v_Color;\n' +
+    '  vec4 tmp = texture2D(u_Sampler, v_TexCoord);' +
+    '  vec3 diffuse1 = v_LightColor * tmp.rgb * v_nDotL;\n' +
+    '  vec3 ambient1 = v_AmbientLight * tmp.rgb;\n' +
+    // '  gl_FragColor = v_Color;\n' +
+    '  gl_FragColor = vec4(diffuse1 + ambient1, tmp.a);\n' +
     '}\n';
+
+
+var ANGLE_STEP = 0;
+var ANGLE_STEPX = 0;
+var eyeX = 3, eyeY = 3, eyeZ = 7;
+
+var u_MvpMatrix;
+var u_NormalMatrix;
+var u_LightColor;
+var u_LightDirection;
+var u_AmbientLight;
+
+var modelMatrix = new Matrix4();  // Model matrix
+var mvpMatrix = new Matrix4();    // Model view projection matrix
+var normalMatrix = new Matrix4(); // Transformation matrix for normals
+var gl;
+var n;
 
 function main() {
     // Retrieve <canvas> element
     var canvas = document.getElementById('webgl');
 
     // Get the rendering context for WebGL
-    var gl = getWebGLContext(canvas);
+    gl = getWebGLContext(canvas);
     if (!gl) {
         console.log('Failed to get the rendering context for WebGL');
         return;
@@ -52,7 +94,7 @@ function main() {
     }
 
     // 
-    var n = initVertexBuffers(gl);
+    n = initVertexBuffers(gl);
     if (n < 0) {
         console.log('Failed to set the vertex information');
         return;
@@ -72,9 +114,9 @@ function main() {
         console.log('Failed to get the storage location');
         return;
     }
-// LIGHT THINGS
+    // LIGHT THINGS
     // Set the light color (white)
-    gl.uniform3f(u_LightColor, 1.0, 1.0, 1.0);
+    gl.uniform3f(u_LightColor, 2.0, 2.0, 2.0);
     // Set the light direction (in the world coordinate)
     var lightDirection = new Vector3([5.0, 3.0, 4.0]);
     lightDirection.normalize();     // Normalize
@@ -82,22 +124,29 @@ function main() {
     // Set the ambient light
     gl.uniform3f(u_AmbientLight, 0.2, 0.2, 0.2);
 
-    document.onkeydown = function (ev) { keydown(ev, gl, n); };
-
     // Calculate the model matrix
-    draw(gl, n);
+    initTextures(gl, 36);
+    document.onkeydown = function (ev) { keydown(ev, gl, n); };
 }
 
-var ANGLE_STEP = 0;
-var u_MvpMatrix;
-var u_NormalMatrix;
-var u_LightColor;
-var u_LightDirection;
-var u_AmbientLight;
-
-var modelMatrix = new Matrix4();  // Model matrix
-var mvpMatrix = new Matrix4();    // Model view projection matrix
-var normalMatrix = new Matrix4(); // Transformation matrix for normals
+function changeView(event, t) {
+    switch (t) {
+        case 'x':
+            if (event.ctrlKey) eyeX--;
+            else eyeX++;
+            break;
+        case 'y':
+            if (event.ctrlKey) eyeY--;
+            else eyeY++;
+            break;
+        case 'z':
+            if (event.ctrlKey) eyeZ--;
+            else eyeZ++;
+            break;
+    };
+    console.log(eyeX, eyeY, eyeZ);
+    draw(gl, n);
+}
 
 function keydown(ev, gl, n) {
     console.log(ev.keyCode);
@@ -124,14 +173,14 @@ function keydown(ev, gl, n) {
         }
     }
 }
-var ANGLE_STEPX = 0;
-function draw(gl, n, Rx = 0, Ry = 0, Rz = 1) {
-    modelMatrix.setTranslate(0, 0.0, 0); // Translate to the y-axis direction
-    modelMatrix.rotate(ANGLE_STEP, 0, 1, 0);     // Rotate 90 degree around the z-axis
-    modelMatrix.rotate(ANGLE_STEPX, 1, 0, 0);     // Rotate 90 degree around the z-axis
+
+function draw(gl, n) {
+    modelMatrix.setTranslate(0, 0.0, 0);
+    modelMatrix.rotate(ANGLE_STEP, 0, 1, 0);
+    modelMatrix.rotate(ANGLE_STEPX, 1, 0, 0);
     // Calculate the view projection matrix
     mvpMatrix.setPerspective(30, 1, 1, 100);
-    mvpMatrix.lookAt(3, 3, 7, 0, 0, 0, 0, 1, 0);
+    mvpMatrix.lookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0);
 
     mvpMatrix.multiply(modelMatrix);
     // Pass the model view projection matrix to u_MvpMatrix
@@ -171,12 +220,6 @@ function initVertexBuffers(gl) {
 
     // Colors
     var colors = new Float32Array([
-        // 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v0-v1-v2-v3 front
-        // 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v0-v3-v4-v5 right
-        // 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v0-v5-v6-v1 up
-        // 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v1-v6-v7-v2 left
-        // 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v7-v4-v3-v2 down
-        // 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0　    // v4-v7-v6-v5 back
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v1-v1-v2-v3 front
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v1-v3-v4-v5 right
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v0-v5-v6-v1 up
@@ -205,10 +248,20 @@ function initVertexBuffers(gl) {
         20, 21, 22, 20, 22, 23     // back
     ]);
 
+    var texcoords = new Float32Array([
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // v0-v1-v2-v3 front        Z
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // v0-v3-v4-v5 right        X 
+        1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, // v0-v5-v6-v1 up           Y
+        1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, // v1-v6-v7-v2 left         X
+        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, // v7-v4-v3-v2 down         Y
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0  // v4-v7-v6-v5 back         Z
+    ]);
+
     // Write the vertex property to buffers (coordinates, colors and normals)
     if (!initArrayBuffer(gl, 'a_Position', vertices, 3)) return -1;
     if (!initArrayBuffer(gl, 'a_Color', colors, 3)) return -1;
     if (!initArrayBuffer(gl, 'a_Normal', normals, 3)) return -1;
+    if (!initArrayBuffer(gl, 'a_TexCoord', texcoords, 2)) return -1;
 
     // Unbind the buffer object
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -246,4 +299,26 @@ function initArrayBuffer(gl, attribute, data, num) {
     gl.enableVertexAttribArray(a_attribute);
 
     return true;
+}
+
+function initTextures(gl, n) {
+    var texture = gl.createTexture();
+    var u_Sampler = gl.getUniformLocation(gl.program, 'u_Sampler');
+    var image = new Image();
+    image.onload = function () { loadTexture(gl, n, texture, u_Sampler, image); };
+    image.src = '../resources/eiffel.jpg';
+}
+
+function loadTexture(gl, n, texture, u_Sampler, image) {
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.uniform1i(u_Sampler, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    draw(gl, n)
 }
