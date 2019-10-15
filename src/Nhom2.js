@@ -60,8 +60,8 @@ var FSHADER_SOURCE =
     '}\n';
 
 
-var ANGLE_STEP = 0;
-var ANGLE_STEPX = 0;
+var ANGLE_STEP = 15;
+var ANGLE_STEPY = 0;
 var eyeX = 3, eyeY = 3, eyeZ = 7;
 
 var u_MvpMatrix;
@@ -124,9 +124,29 @@ function main() {
     // Set the ambient light
     gl.uniform3f(u_AmbientLight, 0.2, 0.2, 0.2);
 
-    // Calculate the model matrix
     initTextures(gl, 36);
+
+    // Calculate the model matrix
+    
     document.onkeydown = function (ev) { keydown(ev, gl, n); };
+    
+    var tick = function () {
+        ANGLE_STEPY = animate(ANGLE_STEPY);  // Update the rotation angle
+        draw(gl, n);   // Draw the triangle
+        requestAnimationFrame(tick, canvas);   // Request that the browser ?calls tick
+    };
+    tick();
+}
+
+var g_last = Date.now();
+function animate(angle) {
+    // Calculate the elapsed time
+    var now = Date.now();
+    var elapsed = now - g_last;
+    g_last = now;
+    // Update the current rotation angle (adjusted by the elapsed time)
+    var newAngle = angle + (ANGLE_STEP * elapsed) / 1000.0;
+    return newAngle %= 360;
 }
 
 function changeView(event, t) {
@@ -151,24 +171,12 @@ function changeView(event, t) {
 function keydown(ev, gl, n) {
     console.log(ev.keyCode);
     switch (ev.keyCode) {
-        case 39: {
-            ANGLE_STEP += 10;
-            draw(gl, n, 0, 1, 0);
+        case 39: { // right arrow key
+            ANGLE_STEP += 15;
             break;
         }
-        case 37: {
-            ANGLE_STEP -= 10;
-            draw(gl, n, 0, 1, 0);
-            break;
-        }
-        case 38: {
-            ANGLE_STEPX += 10;
-            draw(gl, n, 1, 0, 0);
-            break;
-        }
-        case 40: {
-            ANGLE_STEPX -= 10;
-            draw(gl, n, 1, 0, 0);
+        case 37: { // left arrow key
+            ANGLE_STEP -= 15;
             break;
         }
     }
@@ -176,8 +184,7 @@ function keydown(ev, gl, n) {
 
 function draw(gl, n) {
     modelMatrix.setTranslate(0, 0.0, 0);
-    modelMatrix.rotate(ANGLE_STEP, 0, 1, 0);
-    modelMatrix.rotate(ANGLE_STEPX, 1, 0, 0);
+    modelMatrix.rotate(ANGLE_STEPY, 0, 1, 0);
     // Calculate the view projection matrix
     mvpMatrix.setPerspective(30, 1, 1, 100);
     mvpMatrix.lookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0);
@@ -218,6 +225,22 @@ function initVertexBuffers(gl) {
         1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0  // v4-v7-v6-v5 back
     ]);
 
+    var texcoords = new Float32Array([
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,        
+        1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,        
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,        
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,        
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,        
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0         
+
+        // 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // v0-v1-v2-v3 front        Z
+        // 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // v0-v3-v4-v5 right        X 
+        // 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, // v0-v5-v6-v1 up           Y
+        // 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, // v1-v6-v7-v2 left         X
+        // 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, // v7-v4-v3-v2 down         Y
+        // 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0  // v4-v7-v6-v5 back         Z
+    ]);
+
     // Colors
     var colors = new Float32Array([
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v1-v1-v2-v3 front
@@ -246,15 +269,6 @@ function initVertexBuffers(gl) {
         12, 13, 14, 12, 14, 15,    // left
         16, 17, 18, 16, 18, 19,    // down
         20, 21, 22, 20, 22, 23     // back
-    ]);
-
-    var texcoords = new Float32Array([
-        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // v0-v1-v2-v3 front        Z
-        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // v0-v3-v4-v5 right        X 
-        1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, // v0-v5-v6-v1 up           Y
-        1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, // v1-v6-v7-v2 left         X
-        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, // v7-v4-v3-v2 down         Y
-        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0  // v4-v7-v6-v5 back         Z
     ]);
 
     // Write the vertex property to buffers (coordinates, colors and normals)
@@ -320,5 +334,9 @@ function loadTexture(gl, n, texture, u_Sampler, image) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.uniform1i(u_Sampler, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    draw(gl, n)
+    // draw(gl, n)
+}
+var isRotate = true;
+function autoRotate() {
+    ANGLE_STEP = ANGLE_STEP == 0 ? 15 : 0;
 }
