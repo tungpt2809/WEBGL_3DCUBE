@@ -5,9 +5,10 @@ var VSHADER_SOURCE =
     'attribute vec4 a_Color;\n' +
     'attribute vec4 a_Normal;\n' +
     'uniform mat4 u_MvpMatrix;\n' +
+    'uniform mat4 u_ModelMatrix;\n' +
     'uniform mat4 u_NormalMatrix;\n' +   // Transformation matrix of the normal
     'uniform vec3 u_LightColor;\n' +     // Light color
-    'uniform vec3 u_LightDirection;\n' + // Light direction (in the world coordinate, normalized)
+    'uniform vec3 u_LightPosition;\n' +  // Position of the light source (in the world coordinate system)
     'uniform vec3 u_AmbientLight;\n' +   // Ambient light color
     'varying vec4 v_Color;\n' +
 
@@ -22,19 +23,27 @@ var VSHADER_SOURCE =
     '  gl_Position = u_MvpMatrix * a_Position;\n' +
     // Recalculate the normal based on the model matrix and make its length 1.
     '  vec3 normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
+
+    '  vec4 vertexPosition = u_ModelMatrix * a_Position;\n' +
+    // Calculate the light direction and make it 1.0 in length
+    '  vec3 lightDirection = normalize(u_LightPosition - vec3(vertexPosition));\n' +
+
     // Calculate the dot product of the light direction and the orientation of a surface (the normal)
-    '  float nDotL = max(dot(u_LightDirection, normal), 0.0);\n' +
-    '  v_nDotL = nDotL;' +
+    '  float nDotL = max(dot(lightDirection, normal), 0.0);\n' +
+
     // Calculate the color due to diffuse reflection
     '  vec3 diffuse = u_LightColor * a_Color.rgb * nDotL;\n' +
-    '  v_LightColor = u_LightColor;' +
+
     // Calculate the color due to ambient reflection
     '  vec3 ambient = u_AmbientLight * a_Color.rgb;\n' +
-    '  v_AmbientLight = u_AmbientLight;' +
+
     // Add the surface colors due to diffuse reflection and ambient reflection
     '  v_Color = vec4(diffuse + ambient, a_Color.a);\n' +
 
     '  v_TexCoord = a_TexCoord;\n' +
+    '  v_nDotL = nDotL;' +
+    '  v_LightColor = u_LightColor;' +
+    '  v_AmbientLight = u_AmbientLight;' +
 
     '}\n';
 
@@ -44,7 +53,7 @@ var FSHADER_SOURCE =
     'precision mediump float;\n' +
     '#endif\n' +
     'varying vec4 v_Color;\n' +
-
+    'uniform int u_isTexturing;\n' +
     'uniform sampler2D u_Sampler;\n' +
     'varying vec2 v_TexCoord;\n' +
     'varying float v_nDotL;\n' +
@@ -55,26 +64,40 @@ var FSHADER_SOURCE =
     '  vec4 tmp = texture2D(u_Sampler, v_TexCoord);' +
     '  vec3 diffuse1 = v_LightColor * tmp.rgb * v_nDotL;\n' +
     '  vec3 ambient1 = v_AmbientLight * tmp.rgb;\n' +
-    // '  gl_FragColor = v_Color;\n' +
+    '  if(u_isTexturing == 1)' +
     '  gl_FragColor = vec4(diffuse1 + ambient1, tmp.a);\n' +
+    '  else ' +
+    '  gl_FragColor = v_Color;\n' +
     '}\n';
 
 
-var ANGLE_STEP = 15;
+var ANGLE_STEP = 30.0;
 var ANGLE_STEPY = 0;
-var eyeX = 3, eyeY = 3, eyeZ = 7;
+var eyeX = 3, eyeY = 3, eyeZ = 9;
 
 var u_MvpMatrix;
+var u_ModelMatrix;
 var u_NormalMatrix;
 var u_LightColor;
-var u_LightDirection;
+var u_LightPosition;
 var u_AmbientLight;
+var u_isTexturing;
 
 var modelMatrix = new Matrix4();  // Model matrix
 var mvpMatrix = new Matrix4();    // Model view projection matrix
 var normalMatrix = new Matrix4(); // Transformation matrix for normals
 var gl;
 var n;
+
+//Biến tịnh tiến cube Translate
+var Tx = 0.0 ;
+var Ty = 0.0 ;
+var Tz = 0.0 ;
+
+//Biến co dãn cube Scale
+var Sx = 1.0 ;
+var Sy = 1.0 ;
+var Sz = 1.0 ;
 
 function main() {
     // Retrieve <canvas> element
@@ -105,31 +128,24 @@ function main() {
     gl.enable(gl.DEPTH_TEST);
 
     // Get the storage locations of uniform variables
+    u_ModelMatrix = gl.getUniformLocation(gl.program, 'u_ModelMatrix');
     u_MvpMatrix = gl.getUniformLocation(gl.program, 'u_MvpMatrix');
     u_NormalMatrix = gl.getUniformLocation(gl.program, 'u_NormalMatrix');
     u_LightColor = gl.getUniformLocation(gl.program, 'u_LightColor');
-    u_LightDirection = gl.getUniformLocation(gl.program, 'u_LightDirection');
+    u_LightPosition = gl.getUniformLocation(gl.program, 'u_LightPosition');
     u_AmbientLight = gl.getUniformLocation(gl.program, 'u_AmbientLight');
-    if (!u_MvpMatrix || !u_NormalMatrix || !u_LightColor || !u_LightDirection || !u_AmbientLight) {
+    u_isTexturing = gl.getUniformLocation(gl.program, 'u_isTexturing');
+    if (!u_MvpMatrix || !u_NormalMatrix || !u_LightColor || !u_LightPosition || !u_AmbientLight ||!u_isTexturing) {
         console.log('Failed to get the storage location');
         return;
     }
-    // LIGHT THINGS
-    // Set the light color (white)
-    gl.uniform3f(u_LightColor, 2.0, 2.0, 2.0);
-    // Set the light direction (in the world coordinate)
-    var lightDirection = new Vector3([5.0, 3.0, 4.0]);
-    lightDirection.normalize();     // Normalize
-    gl.uniform3fv(u_LightDirection, lightDirection.elements);
-    // Set the ambient light
-    gl.uniform3f(u_AmbientLight, 0.2, 0.2, 0.2);
 
     initTextures(gl, 36);
 
     // Calculate the model matrix
-    
+
     document.onkeydown = function (ev) { keydown(ev, gl, n); };
-    
+
     var tick = function () {
         ANGLE_STEPY = animate(ANGLE_STEPY);  // Update the rotation angle
         draw(gl, n);   // Draw the triangle
@@ -181,10 +197,28 @@ function keydown(ev, gl, n) {
         }
     }
 }
-
+var lightX, lightY, lightX, lightColor;
+var checkBoxTexture = document.getElementById("myCheck");
 function draw(gl, n) {
-    modelMatrix.setTranslate(0, 0.0, 0);
+    lightColor = hex2rgba(FormLight.color.value);
+    lightX = FormLight.x.value;
+    lightY = FormLight.y.value;
+    lightZ = FormLight.z.value;
+    gl.uniform3f(u_LightColor, lightColor.r, lightColor.g, lightColor.b);
+    gl.uniform3f(u_LightPosition, lightX, lightY, lightZ);
+    gl.uniform3f(u_AmbientLight, 0.2, 0.2, 0.2);
+
+    // Calculate the matrix to transform the normal based on the model matrix
+    // modelMatrix.setTranslate(0, 0.0, 0);
+    
+    modelMatrix.setTranslate(Tx, Ty, Tz);
+    modelMatrix.scale(Sx,Sy,Sz);
     modelMatrix.rotate(ANGLE_STEPY, 0, 1, 0);
+    gl.uniformMatrix4fv(u_ModelMatrix, false, modelMatrix.elements);
+
+    if(checkBoxTexture.checked) gl.uniform1i(u_isTexturing, 1);
+    else gl.uniform1i(u_isTexturing, 0);
+
     // Calculate the view projection matrix
     mvpMatrix.setPerspective(30, 1, 1, 100);
     mvpMatrix.lookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0);
@@ -193,7 +227,6 @@ function draw(gl, n) {
     // Pass the model view projection matrix to u_MvpMatrix
     gl.uniformMatrix4fv(u_MvpMatrix, false, mvpMatrix.elements);
 
-    // Calculate the matrix to transform the normal based on the model matrix
     normalMatrix.setInverseOf(modelMatrix);
     normalMatrix.transpose();
     // Pass the transformation matrix for normals to u_NormalMatrix
@@ -226,12 +259,12 @@ function initVertexBuffers(gl) {
     ]);
 
     var texcoords = new Float32Array([
-        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,        
-        1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,        
-        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,        
-        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,        
-        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,        
-        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0         
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+        1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+        1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
 
         // 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // v0-v1-v2-v3 front        Z
         // 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, // v0-v3-v4-v5 right        X 
@@ -243,13 +276,13 @@ function initVertexBuffers(gl) {
 
     // Colors
     var colors = new Float32Array([
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v1-v1-v2-v3 front
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v1-v3-v4-v5 right
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v0-v5-v6-v1 up
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v1-v3-v4-v5 right
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v1-v3-v4-v5 right
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,     // v1-v3-v4-v5 right
-    ]);
+        1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v0-v1-v2-v3 front 
+        1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v0-v3-v4-v5 right         
+        1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v0-v5-v6-v1 up           
+        1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v1-v6-v7-v2 left         
+        1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v7-v4-v3-v2 down         
+        1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,     // v4-v7-v6-v5 back         
+    ])
 
     // Normal
     var normals = new Float32Array([
@@ -339,4 +372,87 @@ function loadTexture(gl, n, texture, u_Sampler, image) {
 var isRotate = true;
 function autoRotate() {
     ANGLE_STEP = ANGLE_STEP == 0 ? 15 : 0;
+    document.getElementById('step').innerText = ANGLE_STEP;
+}
+
+function speedUp() {
+    ANGLE_STEP += 15;
+    document.getElementById('step').innerText = ANGLE_STEP;
+}
+
+function speedDown() {
+    ANGLE_STEP -= 15;
+    document.getElementById('step').innerText = ANGLE_STEP;
+}
+
+function hex2rgba(hex) {
+    hex = hex.replace('#', '');
+    return { 
+        r: parseInt(hex.substring(0, hex.length / 3), 16) / 255,
+        g: parseInt(hex.substring(hex.length / 3, 2 * hex.length / 3), 16) / 255,
+        b: parseInt(hex.substring(2 * hex.length / 3, 3 * hex.length / 3), 16) / 255 
+    };
+}
+
+//Hàm tịnh tiến cube
+function TranslateCube(x) {
+    switch(x) {
+        case 'L':
+            Ty += 0.5;
+            break;
+        case 'X':
+            Ty -= 0.5;
+            break;
+        case 'T':
+            Tx -= 0.5;
+            break;
+        case 'P':
+            Tx += 0.5;
+            break;
+        case 'R':
+            Tz += 0.5;
+            break;
+        case 'V':
+            Tz -= 0.5;
+            break;
+        default:
+      // code block
+    }
+}
+
+//Hàm co dãn cube
+function ScaleCube(x) {
+    var dv = 0.1;
+    switch(x) {
+        case 'L':
+            Sy += dv;
+            break;
+        case 'X':
+            Sy -= dv;
+            break;
+        case 'T':
+            Sx -= dv;
+            break;
+        case 'P':
+            Sx += dv;
+            break;
+        case 'R':
+            Sz += dv;
+            break;
+        case 'V':
+            Sz -= dv;
+            break;
+        case 'To':
+            Sx += dv;
+            Sy += dv;
+            Sz += dv;
+            break;
+        case 'Nho':
+            Sx -= dv;
+            Sy -= dv;
+            Sz -= dv;
+            break;
+        default:
+      // code block
+    }
 }

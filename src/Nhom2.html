@@ -1,24 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>This is the program that show you the cube</title>
-  </head>
 
-  <body onload="main()">
-    <canvas id="webgl" width="400" height="400">
+<head>
+  <meta charset="utf-8" />
+  <title>This is the program that show you the cube</title>
+</head>
+
+<body onload="main()">
+  <canvas id="webgl" width="400" height="400" style="float: left">
     Please use a browser that supports "canvas"
-    </canvas>
-    <button onclick="autoRotate()">Auto Rotate</button>
-    <button onclick="changeView(event, 'x')">EyeX</button>
-    <button onclick="changeView(event, 'y')">EyeY</button>
-    <button onclick="changeView(event, 'z')">EyeZ</button>
+  </canvas>
+  <div style="float: left; margin-left: 20px">
+    <fieldset>
+      <button onclick="speedDown()">-</button>
+      <button onclick="autoRotate()">Auto Rotate</button>
+      <button onclick="speedUp()">+</button>
+      <span id="step"></span>
+    </fieldset>
 
-    <script src="../lib/webgl-utils.js"></script>
-    <script src="../lib/webgl-debug.js"></script>
-    <script src="../lib/cuon-utils.js"></script>
-    <script src="../lib/cuon-matrix.js"></script>
-    <script src="Nhom2.js"></script>
-  </body>
+    <form name="FormLight">
+      <fieldset>
+        <legend>Light <input type="color" name="color" value="#ffffff"></legend>
+        <div class="form-group">
+          <div>
+            <label>x</label>
+            <input type="number" class="xyz" name="x" step="0.1" value="2.0">
+          </div>
+          <div>
+            <label>y</label>
+            <input type="number" class="xyz" name="y" step="0.1" value="1.8">
+          </div>
+          <div>
+            <label>z</label>
+            <input type="number" class="xyz" name="z" step="0.1" value="1.2">
+          </div>
+        </div>
+      </fieldset>
+    </form>
+    <div>Texture? : <input type="checkbox" id="myCheck"></div>
+    <fieldset>
+      <legend>View</legend>
+      <button onclick="changeView(event, 'x')">EyeX</button>
+      <button onclick="changeView(event, 'y')">EyeY</button>
+      <button onclick="changeView(event, 'z')">EyeZ</button>
+    </fieldset>
+  </div>
+  <div style="float: left">
+    <fieldset>
+      <legend>Translate Cube</legend>
+      <button type="button" onclick="TranslateCube('L')">Lên</button>
+      <button type="button" onclick="TranslateCube('X')">Xuống</button>
+      <button type="button" onclick="TranslateCube('T')">Trái</button>
+      <button type="button" onclick="TranslateCube('P')">Phải</button>
+      <button type="button" onclick="TranslateCube('R')">Ra</button>
+      <button type="button" onclick="TranslateCube('V')">Vào</button>
+    </fieldset>
+    <fieldset>
+      <legend>Scale Cube</legend>
+      <div class="Co-dan-cube" style="background-color: gold; border: 1px solid black; padding: 10px">
+        <button type="button" onclick="ScaleCube('L')">Lên</button>
+        <button type="button" onclick="ScaleCube('X')">Xuống</button>
+        <button type="button" onclick="ScaleCube('T')">Trái</button>
+        <button type="button" onclick="ScaleCube('P')">Phải</button>
+        <button type="button" onclick="ScaleCube('R')">Ra</button>
+        <button type="button" onclick="ScaleCube('V')">Vào</button>
+        <button type="button" onclick="ScaleCube('To')">To</button>
+        <button type="button" onclick="ScaleCube('Nho')">Nhỏ</button>
+      </div>
+    </fieldset>
+  </div>
+  <script src="../lib/webgl-utils.js"></script>
+  <script src="../lib/webgl-debug.js"></script>
+  <script src="../lib/cuon-utils.js"></script>
+  <script src="../lib/cuon-matrix.js"></script>
+  <script src="Nhom2.js"></script>
+</body>
+
 </html>
-
